@@ -27,6 +27,7 @@ type APIError struct {
 	Details          string
 	RequestedID      string // The ID used in the request (for hint generation)
 	ExpectedResource string // Expected resource type (e.g., "conversation")
+	Operation        string // Request context (e.g., "conversation_search")
 }
 
 func (e *APIError) Error() string {

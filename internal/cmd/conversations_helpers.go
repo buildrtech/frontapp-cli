@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func buildConvSearchQuery(c *ConvSearchCmd) (string, error) {
@@ -49,8 +51,18 @@ func buildConvSearchQuery(c *ConvSearchCmd) (string, error) {
 		parts = append(parts, "is:unassigned")
 	}
 
-	add("before", c.Before)
-	add("after", c.After)
+	before, err := normalizeSearchTimeInput("before", c.Before)
+	if err != nil {
+		return "", err
+	}
+
+	after, err := normalizeSearchTimeInput("after", c.After)
+	if err != nil {
+		return "", err
+	}
+
+	add("before", before)
+	add("after", after)
 
 	if strings.TrimSpace(c.Query) != "" {
 		parts = append(parts, strings.TrimSpace(c.Query))
@@ -61,6 +73,41 @@ func buildConvSearchQuery(c *ConvSearchCmd) (string, error) {
 	}
 
 	return strings.Join(parts, " "), nil
+}
+
+func normalizeSearchTimeInput(field, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+
+	if isAllDigits(value) {
+		return value, nil
+	}
+
+	if t, err := time.ParseInLocation("2006-01-02", value, time.Local); err == nil {
+		return strconv.FormatInt(t.Unix(), 10), nil
+	}
+
+	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return strconv.FormatInt(t.Unix(), 10), nil
+	}
+
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return strconv.FormatInt(t.Unix(), 10), nil
+	}
+
+	return "", fmt.Errorf("invalid %s value %q: use Unix seconds, YYYY-MM-DD, or RFC3339", field, value)
+}
+
+func isAllDigits(value string) bool {
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+
+	return value != ""
 }
 
 func readIDsFromInput(source string) ([]string, error) {

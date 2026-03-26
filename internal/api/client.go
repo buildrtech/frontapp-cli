@@ -236,6 +236,22 @@ func (c *Client) Delete(ctx context.Context, path string) error {
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
+// DeleteWithBody performs a DELETE request with a JSON body.
+func (c *Client) DeleteWithBody(ctx context.Context, path string, body interface{}) error {
+	var bodyBytes []byte
+
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal body: %w", err)
+		}
+
+		bodyBytes = data
+	}
+
+	return c.do(ctx, http.MethodDelete, path, bodyBytes, nil)
+}
+
 // Download performs a GET request and writes the response body to the writer.
 func (c *Client) Download(ctx context.Context, path string, w io.Writer) error {
 	if w == nil {
@@ -435,6 +451,26 @@ func (c *Client) GetTeammate(ctx context.Context, id string) (*Teammate, error) 
 	}
 
 	return &tm, nil
+}
+
+// ListTeammateSignatures lists signatures for a teammate.
+func (c *Client) ListTeammateSignatures(ctx context.Context, teammateID string) (*ListResponse[Signature], error) {
+	var resp ListResponse[Signature]
+	if err := c.Get(ctx, fmt.Sprintf("/teammates/%s/signatures", teammateID), &resp); err != nil {
+		return nil, enrichErrorWithContext(err, teammateID, "teammate")
+	}
+
+	return &resp, nil
+}
+
+// GetSignature gets a single signature by ID.
+func (c *Client) GetSignature(ctx context.Context, id string) (*Signature, error) {
+	var sig Signature
+	if err := c.Get(ctx, "/signatures/"+id, &sig); err != nil {
+		return nil, enrichErrorWithContext(err, id, "signature")
+	}
+
+	return &sig, nil
 }
 
 // ListChannels lists all channels.

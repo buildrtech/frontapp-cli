@@ -26,6 +26,7 @@ type CLI struct {
 	Conv       ConvCmd          `cmd:"" name:"conversations" aliases:"conv" help:"Conversations"`
 	Msg        MsgCmd           `cmd:"" name:"messages" aliases:"msg" help:"Messages"`
 	Draft      DraftCmd         `cmd:"" name:"drafts" help:"Drafts"`
+	Signature  SignatureCmd     `cmd:"" name:"signatures" help:"Signatures"`
 	Tag        TagCmd           `cmd:"" name:"tags" help:"Tags"`
 	Inbox      InboxCmd         `cmd:"" name:"inboxes" help:"Inboxes"`
 	Teammate   TeammateCmd      `cmd:"" name:"teammates" help:"Teammates"`

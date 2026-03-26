@@ -81,6 +81,28 @@ func TestFormat_APIError404WithCorrectPrefix(t *testing.T) {
 	}
 }
 
+func TestFormat_APIError404ConversationSearchHint(t *testing.T) {
+	err := &api.APIError{
+		StatusCode: 404,
+		Message:    "not found",
+		Operation:  "conversation_search",
+	}
+
+	result := Format(err)
+
+	if !strings.Contains(result, "Conversation search failed") {
+		t.Errorf("expected conversation search hint, got: %s", result)
+	}
+
+	if !strings.Contains(result, "conversations:read") {
+		t.Errorf("expected scope hint, got: %s", result)
+	}
+
+	if !strings.Contains(result, "inb_") || !strings.Contains(result, "tag_") {
+		t.Errorf("expected inbox/tag ID hint, got: %s", result)
+	}
+}
+
 func TestGetSuggestionForResource(t *testing.T) {
 	tests := []struct {
 		resourceType string

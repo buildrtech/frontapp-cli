@@ -32,20 +32,36 @@ type Message struct {
 	Links       Links        `json:"_links,omitempty"` //nolint:tagliatelle // Front API //nolint:tagliatelle // Front API uses underscore prefix
 }
 
-// Draft represents a draft message.
-type Draft struct {
+// DraftMessage represents a Front draft message using the docs-aligned message shape.
+type DraftMessage struct {
 	ID          string       `json:"id"`
-	Version     int          `json:"version"`
-	Body        string       `json:"body"`
-	Author      *Author      `json:"author,omitempty"`
-	To          []string     `json:"to,omitempty"`
-	CC          []string     `json:"cc,omitempty"`
-	BCC         []string     `json:"bcc,omitempty"`
-	Subject     string       `json:"subject,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
+	MessageUID  string       `json:"message_uid,omitempty"`
+	Type        string       `json:"type,omitempty"`
+	IsInbound   bool         `json:"is_inbound,omitempty"`
+	DraftMode   string       `json:"draft_mode,omitempty"`
+	ErrorType   string       `json:"error_type,omitempty"`
+	Version     string       `json:"version"`
 	CreatedAt   float64      `json:"created_at"`
 	UpdatedAt   float64      `json:"updated_at,omitempty"`
+	Blurb       string       `json:"blurb,omitempty"`
+	Author      *Author      `json:"author,omitempty"`
+	Recipients  []Recipient  `json:"recipients,omitempty"`
+	Body        string       `json:"body"`
+	Text        string       `json:"text"`
+	Subject     string       `json:"subject,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 	Links       Links        `json:"_links,omitempty"` //nolint:tagliatelle // Front API //nolint:tagliatelle // Front API uses underscore prefix
+}
+
+// Signature represents a Front message signature.
+type Signature struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name,omitempty"`
+	Body      string  `json:"body,omitempty"`
+	IsDefault bool    `json:"is_default,omitempty"`
+	CreatedAt float64 `json:"created_at,omitempty"`
+	UpdatedAt float64 `json:"updated_at,omitempty"`
+	Links     Links   `json:"_links,omitempty"` //nolint:tagliatelle // Front API
 }
 
 // Tag represents a Front tag.

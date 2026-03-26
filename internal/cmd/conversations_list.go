@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -443,8 +444,8 @@ type ConvSearchCmd struct {
 	Status     string   `help:"Filter by status (open, archived, snoozed, trashed)"`
 	Assignee   string   `help:"Filter by assignee (assignee: or me)"`
 	Unassigned bool     `help:"Filter unassigned conversations"`
-	Before     string   `help:"Filter before date/time (before:)"`
-	After      string   `help:"Filter after date/time (after:)"`
+	Before     string   `help:"Filter before date/time (before:). Accepts Unix seconds, YYYY-MM-DD (local tz), or RFC3339; sent as Unix seconds"`
+	After      string   `help:"Filter after date/time (after:). Accepts Unix seconds, YYYY-MM-DD (local tz), or RFC3339; sent as Unix seconds"`
 	Limit      int      `help:"Maximum results" default:"25"`
 }
 
@@ -467,13 +468,22 @@ func (c *ConvSearchCmd) Run(flags *RootFlags) error {
 	}
 
 	params := url.Values{}
-	params.Set("q", query)
 	if c.Limit > 0 {
 		params.Set("limit", fmt.Sprintf("%d", c.Limit))
 	}
 
+	path := "/conversations/search/" + url.PathEscape(query)
+	if encoded := params.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
 	var resp api.ListResponse[api.Conversation]
-	if err := client.Get(ctx, "/conversations/search?"+params.Encode(), &resp); err != nil {
+	if err := client.Get(ctx, path, &resp); err != nil {
+		var apiErr *api.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			apiErr.Operation = "conversation_search"
+		}
+
 		fmt.Fprint(os.Stderr, errfmt.Format(err))
 
 		return err

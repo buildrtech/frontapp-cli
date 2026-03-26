@@ -23,6 +23,7 @@ credential storage built in.
   snooze, follow, custom fields
 - **Messages** - get, send, reply, attachments + download
 - **Drafts** - create, list, get, update, delete
+- **Signatures** - list teammate signatures, get a signature
 - **Tags** - list/tree, get, create, update, delete, children, convos
 - **Contacts** - list/search/get, handles, notes, convos, create/update/delete/merge
 - **Inboxes** - list/get, convos, channels
@@ -138,6 +139,7 @@ functionality:
 | **Comments**          |  ✓   |   ✓   |        |      |
 | **Contacts**          |  ✓   |   ✓   |   ✓    |      |
 | **Conversations**     |  ✓   |   ✓   |        |      |
+| **Signatures**        |  ✓   |       |        |      |
 | **Drafts**            |  ✓   |   ✓   |   ✓    |      |
 | **Inboxes**           |  ✓   |       |        |      |
 | **Message templates** |  ✓   |       |        |      |
@@ -291,10 +293,19 @@ frontcli msg attachment download att_xxx -o ./file.pdf
 
 ```bash
 # Create draft (reply to conversation)
-frontcli drafts create cnv_xxx --body "Draft reply"
+frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --body "Draft reply"
+
+# Create draft without adding the default signature
+frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --no-default-signature --body "Draft reply"
+
+# Create draft with an explicit signature
+frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --signature sig_xxx --body "Draft reply"
 
 # Create draft (new message via channel)
-frontcli drafts create --channel cha_xxx --to user@example.com --body "Draft message"
+frontcli drafts create --channel cha_xxx --to user@example.com --author tea_xxx --inbox inb_xxx --body "Draft message"
+
+# Create shared draft and assign to a different teammate
+frontcli drafts create --channel cha_xxx --to user@example.com --author tea_xxx --inbox inb_xxx --assignee tea_yyy --mode shared --body "Shared draft"
 
 # List drafts in conversation
 frontcli drafts list cnv_xxx
@@ -303,10 +314,20 @@ frontcli drafts list cnv_xxx
 frontcli drafts get dra_xxx
 
 # Update draft (optimistic locking with version)
-frontcli drafts update dra_xxx --body "Updated draft" --draft-version 1
+frontcli drafts update dra_xxx --body "Updated draft" --draft-version draft-ver-123
 
 # Delete draft
-frontcli drafts delete dra_xxx
+frontcli drafts delete dra_xxx --draft-version draft-ver-123
+```
+
+### Signatures
+
+```bash
+# List signatures for a teammate
+frontcli signatures list --teammate tea_xxx
+
+# Get one signature
+frontcli signatures get sig_xxx
 ```
 
 ### Tags

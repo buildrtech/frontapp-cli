@@ -67,6 +67,14 @@ func formatAPIError(err *api.APIError) string {
 			sb.WriteString("  " + err.Details + "\n\n")
 		}
 
+		if err.Operation == "conversation_search" {
+			sb.WriteString("  Conversation search failed.\n")
+			sb.WriteString("  Check OAuth scope includes conversations:read.\n")
+			sb.WriteString("  Verify filter IDs are real IDs (inbox: inb_..., tag: tag_...).\n")
+
+			return sb.String()
+		}
+
 		// Check if wrong ID type was used
 		if err.RequestedID != "" && err.ExpectedResource != "" {
 			if hint := getWrongIDTypeHint(err.RequestedID, err.ExpectedResource); hint != "" {

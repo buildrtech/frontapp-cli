@@ -16,7 +16,7 @@ type CompletionBashCmd struct{}
 func (c *CompletionBashCmd) Run() error {
 	script := `_frontcli_completions() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="version config auth conversations messages drafts tags inboxes teammates contacts channels comments templates completion whoami"
+    local commands="version config auth conversations messages drafts signatures tags inboxes teammates contacts channels comments templates completion whoami"
 
     if [ $COMP_CWORD -eq 1 ]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -44,6 +44,7 @@ _frontcli() {
         'conversations:Conversations'
         'messages:Messages'
         'drafts:Drafts'
+        'signatures:Signatures'
         'tags:Tags'
         'inboxes:Inboxes'
         'teammates:Teammates'
@@ -84,6 +85,7 @@ complete -c frontcli -n '__fish_use_subcommand' -a 'auth' -d 'Authentication and
 complete -c frontcli -n '__fish_use_subcommand' -a 'conversations' -d 'Conversations'
 complete -c frontcli -n '__fish_use_subcommand' -a 'messages' -d 'Messages'
 complete -c frontcli -n '__fish_use_subcommand' -a 'drafts' -d 'Drafts'
+complete -c frontcli -n '__fish_use_subcommand' -a 'signatures' -d 'Signatures'
 complete -c frontcli -n '__fish_use_subcommand' -a 'tags' -d 'Tags'
 complete -c frontcli -n '__fish_use_subcommand' -a 'inboxes' -d 'Inboxes'
 complete -c frontcli -n '__fish_use_subcommand' -a 'teammates' -d 'Teammates'

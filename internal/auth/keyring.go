@@ -228,8 +228,9 @@ func (s *KeyringStore) SetToken(client, email string, tok Token) error {
 	}
 
 	if err := s.ring.Set(keyring.Item{
-		Key:  tokenKey(normalizedClient, email),
-		Data: payload,
+		Key:   tokenKey(normalizedClient, email),
+		Data:  payload,
+		Label: tokenLabel(email),
 	}); err != nil {
 		return wrapKeychainError(fmt.Errorf("store token: %w", err))
 	}
@@ -347,6 +348,10 @@ func ParseTokenKey(k string) (client, email string, ok bool) {
 
 func tokenKey(client, email string) string {
 	return fmt.Sprintf("token:%s:%s", client, email)
+}
+
+func tokenLabel(email string) string {
+	return fmt.Sprintf("%s refresh token (%s)", config.AppName, email)
 }
 
 func normalize(s string) string {

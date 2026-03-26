@@ -163,9 +163,9 @@ func GetAuthenticatedEmail(client string) (string, error) {
 		return "", err
 	}
 
-	tokens, err := store.ListTokens()
+	keys, err := store.Keys()
 	if err != nil {
-		return "", fmt.Errorf("list tokens: %w", err)
+		return "", fmt.Errorf("list keyring keys: %w", err)
 	}
 
 	normalizedClient, err := config.NormalizeClientNameOrDefault(client)
@@ -173,9 +173,14 @@ func GetAuthenticatedEmail(client string) (string, error) {
 		return "", fmt.Errorf("normalize client: %w", err)
 	}
 
-	for _, tok := range tokens {
-		if tok.Client == normalizedClient {
-			return tok.Email, nil
+	for _, key := range keys {
+		tokenClient, email, ok := ParseTokenKey(key)
+		if !ok {
+			continue
+		}
+
+		if tokenClient == normalizedClient {
+			return email, nil
 		}
 	}
 

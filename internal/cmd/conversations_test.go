@@ -5,9 +5,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -17,10 +20,12 @@ import (
 func TestConvSearchEncodesQuery(t *testing.T) {
 	var gotPath string
 	var gotQuery string
+	var gotLimit string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		gotPath = r.URL.EscapedPath()
 		gotQuery = r.URL.Query().Get("q")
+		gotLimit = r.URL.Query().Get("limit")
 		_, _ = io.WriteString(w, `{"_results":[]}`)
 	}))
 	defer srv.Close()
@@ -38,12 +43,86 @@ func TestConvSearchEncodesQuery(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if gotPath != "/conversations/search" {
-		t.Fatalf("expected path /conversations/search, got %s", gotPath)
+	wantPath := "/conversations/search/" + url.PathEscape("from:me project update")
+	if gotPath != wantPath {
+		t.Fatalf("expected path %s, got %s", wantPath, gotPath)
 	}
 
-	if gotQuery != "from:me project update" {
-		t.Fatalf("unexpected query: %q", gotQuery)
+	if gotQuery != "" {
+		t.Fatalf("expected no q query parameter, got %q", gotQuery)
+	}
+
+	if gotLimit != "10" {
+		t.Fatalf("expected limit=10, got %q", gotLimit)
+	}
+}
+
+func TestBuildConvSearchQuery_NormalizesDateOnly(t *testing.T) {
+	before := time.Date(2026, 3, 3, 0, 0, 0, 0, time.Local).Unix()
+	after := time.Date(2026, 2, 1, 0, 0, 0, 0, time.Local).Unix()
+
+	q, err := buildConvSearchQuery(&ConvSearchCmd{
+		Before: "2026-03-03",
+		After:  "2026-02-01",
+		Query:  "google ads",
+	})
+	if err != nil {
+		t.Fatalf("buildConvSearchQuery: %v", err)
+	}
+
+	want := "before:" + strconv.FormatInt(before, 10) + " after:" + strconv.FormatInt(after, 10) + " google ads"
+	if q != want {
+		t.Fatalf("unexpected query:\nwant: %s\ngot:  %s", want, q)
+	}
+}
+
+func TestBuildConvSearchQuery_NormalizesRFC3339(t *testing.T) {
+	raw := "2026-02-01T15:04:05+01:00"
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+
+	q, err := buildConvSearchQuery(&ConvSearchCmd{
+		After: raw,
+		Query: "google ads",
+	})
+	if err != nil {
+		t.Fatalf("buildConvSearchQuery: %v", err)
+	}
+
+	want := "after:" + strconv.FormatInt(parsed.Unix(), 10) + " google ads"
+	if q != want {
+		t.Fatalf("unexpected query:\nwant: %s\ngot:  %s", want, q)
+	}
+}
+
+func TestBuildConvSearchQuery_PassesUnixTimestamp(t *testing.T) {
+	q, err := buildConvSearchQuery(&ConvSearchCmd{
+		After: "1704067200",
+		Query: "google ads",
+	})
+	if err != nil {
+		t.Fatalf("buildConvSearchQuery: %v", err)
+	}
+
+	want := "after:1704067200 google ads"
+	if q != want {
+		t.Fatalf("unexpected query:\nwant: %s\ngot:  %s", want, q)
+	}
+}
+
+func TestBuildConvSearchQuery_InvalidTimestamp(t *testing.T) {
+	_, err := buildConvSearchQuery(&ConvSearchCmd{
+		After: "2026/02/01",
+		Query: "google ads",
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid after value") {
+		t.Fatalf("expected invalid after value error, got: %v", err)
 	}
 }
 
