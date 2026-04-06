@@ -122,6 +122,66 @@ func TestDraftCreateAcceptsStringVersionResponse(t *testing.T) {
 	}
 }
 
+func TestDraftCreateIncludesChannelIDForNewMessageDrafts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var gotBody map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/channels/cha_v4x/drafts":
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{
+				"id":"msg_draft_123",
+				"type":"email",
+				"is_inbound":false,
+				"draft_mode":"private",
+				"version":"draft-ver-123",
+				"created_at":1710000000,
+				"body":"hello world",
+				"text":"hello world",
+				"_links":{"related":{"conversation":"https://api2.frontapp.com/conversations/cnv_456"}}
+			}`)
+		case "/conversations/cnv_456":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	old := newClientFromAuth
+	newClientFromAuth = func(_, _ string) (*api.Client, error) {
+		return api.NewClientWithBaseURL(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"}), srv.URL), nil
+	}
+	t.Cleanup(func() { newClientFromAuth = old })
+
+	restoreStdout := captureFile(t, &os.Stdout)
+
+	cmd := DraftCreateCmd{
+		Channel: "cha_v4x",
+		To:      "alice@example.com",
+		Body:    "hello world",
+		Author:  "tea_author",
+		Inbox:   "inb_team",
+	}
+	flags := &RootFlags{Plain: true, Account: "test@example.com"}
+
+	if err := cmd.Run(flags); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	_ = restoreStdout()
+
+	if gotBody["channel_id"] != "cha_v4x" {
+		t.Fatalf("expected channel_id in create request, got %#v", gotBody["channel_id"])
+	}
+}
+
 func TestDraftCreateRequiresAuthorAndInbox(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
