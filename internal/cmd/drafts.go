@@ -102,6 +102,10 @@ func (c *DraftCreateCmd) Run(flags *RootFlags) error {
 		req["to"] = []string{c.To}
 	}
 
+	if c.Channel != "" {
+		req["channel_id"] = c.Channel
+	}
+
 	var createPath string
 	switch {
 	case c.ConvID != "":
