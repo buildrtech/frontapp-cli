@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -11,6 +12,7 @@ import (
 	"github.com/dedene/frontapp-cli/internal/api"
 	"github.com/dedene/frontapp-cli/internal/auth"
 	"github.com/dedene/frontapp-cli/internal/config"
+	"github.com/dedene/frontapp-cli/internal/output"
 )
 
 type AuthCmd struct {
@@ -20,6 +22,13 @@ type AuthCmd struct {
 	Status AuthStatusCmd `cmd:"" help:"Show authentication status"`
 	List   AuthListCmd   `cmd:"" help:"List authenticated accounts"`
 }
+
+var (
+	authorizeFn                   = auth.Authorize
+	beginRemoteAuthorizationFn    = auth.BeginRemoteAuthorization
+	completeRemoteAuthorizationFn = auth.CompleteRemoteAuthorization
+	openAuthStoreFn               = auth.OpenDefault
+)
 
 type AuthSetupCmd struct {
 	ClientID     string `arg:"" help:"OAuth client ID"`
@@ -36,7 +45,7 @@ func (c *AuthSetupCmd) Run() error {
 			fmt.Print("Client Secret: ")
 
 			bytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println() // newline after hidden input
+			fmt.Println()
 
 			if err != nil {
 				return fmt.Errorf("failed to read secret: %w", err)
@@ -70,12 +79,20 @@ type AuthLoginCmd struct {
 	ClientName   string `help:"Client name" default:"default" name:"client-name"`
 	ForceConsent bool   `help:"Force consent prompt even if already authorized"`
 	Manual       bool   `help:"Manual authorization (paste URL instead of callback server)"`
+	Remote       bool   `help:"Remote authorization (step 1 returns a URL; step 2 completes with pasted redirect URL)"`
+	Step         int    `help:"Remote authorization step (1 or 2)"`
+	State        string `help:"OAuth state returned by remote step 1"`
+	AuthURL      string `help:"Redirect URL returned by the browser after authorization" name:"auth-url"`
 }
 
 func (c *AuthLoginCmd) Run(flags *RootFlags) error {
 	ctx := context.Background()
 
-	refreshToken, err := auth.Authorize(ctx, auth.AuthorizeOptions{
+	if c.Remote {
+		return c.runRemote(ctx, flags)
+	}
+
+	refreshToken, err := authorizeFn(ctx, auth.AuthorizeOptions{
 		Client:       c.ClientName,
 		ForceConsent: c.ForceConsent,
 		Manual:       c.Manual,
@@ -85,22 +102,19 @@ func (c *AuthLoginCmd) Run(flags *RootFlags) error {
 		return fmt.Errorf("authorization failed: %w", err)
 	}
 
-	store, err := auth.OpenDefault()
+	store, err := openAuthStoreFn()
 	if err != nil {
 		return fmt.Errorf("open keyring: %w", err)
 	}
 
-	// Use email from flag or try to fetch from /me
 	email := c.Email
 	if email == "" && flags != nil && flags.Account != "" {
 		email = flags.Account
 	}
 
 	if email == "" {
-		// Fetch real email from /me endpoint
 		email, err = c.fetchEmail(ctx, refreshToken)
 		if err != nil {
-			// Don't fall back - require user to specify email
 			return fmt.Errorf("could not determine your identity: %w\nUse --email flag to specify your email", err)
 		}
 	}
@@ -120,27 +134,97 @@ func (c *AuthLoginCmd) Run(flags *RootFlags) error {
 	return nil
 }
 
+func (c *AuthLoginCmd) runRemote(ctx context.Context, flags *RootFlags) error {
+	mode, err := resolveOutputMode(flags)
+	if err != nil {
+		return err
+	}
+
+	email := strings.TrimSpace(c.Email)
+	if email == "" {
+		return fmt.Errorf("--email is required with --remote")
+	}
+
+	switch c.Step {
+	case 1:
+		result, err := beginRemoteAuthorizationFn(ctx, auth.RemoteAuthorizeOptions{
+			Client:       c.ClientName,
+			Email:        email,
+			ForceConsent: c.ForceConsent,
+		})
+		if err != nil {
+			return fmt.Errorf("authorization failed: %w", err)
+		}
+
+		if mode.JSON {
+			return output.WriteJSON(os.Stdout, result)
+		}
+
+		fmt.Fprintf(os.Stdout, "Open this URL to authorize:\n%s\n\nState: %s\n", result.AuthURL, result.State)
+		return nil
+	case 2:
+		if strings.TrimSpace(c.State) == "" {
+			return fmt.Errorf("--state is required for --remote --step 2")
+		}
+
+		if strings.TrimSpace(c.AuthURL) == "" {
+			return fmt.Errorf("--auth-url is required for --remote --step 2")
+		}
+
+		refreshToken, err := completeRemoteAuthorizationFn(ctx, auth.RemoteCompleteOptions{
+			Client:      c.ClientName,
+			State:       c.State,
+			RedirectURL: c.AuthURL,
+		})
+		if err != nil {
+			return fmt.Errorf("authorization failed: %w", err)
+		}
+
+		store, err := openAuthStoreFn()
+		if err != nil {
+			return fmt.Errorf("open keyring: %w", err)
+		}
+
+		tok := auth.Token{
+			Email:        email,
+			RefreshToken: refreshToken,
+			CreatedAt:    time.Now().UTC(),
+		}
+		if err := store.SetToken(c.ClientName, email, tok); err != nil {
+			return fmt.Errorf("store token: %w", err)
+		}
+
+		result := map[string]string{
+			"status":      "ok",
+			"email":       email,
+			"client_name": c.ClientName,
+		}
+		if mode.JSON {
+			return output.WriteJSON(os.Stdout, result)
+		}
+
+		fmt.Fprintf(os.Stdout, "Successfully authenticated as %s\n", email)
+		return nil
+	default:
+		return fmt.Errorf("--step must be 1 or 2 when using --remote")
+	}
+}
+
 func (c *AuthLoginCmd) fetchEmail(ctx context.Context, refreshToken string) (string, error) {
-	// Create a temporary token source with the refresh token
 	ts := auth.NewRefreshTokenSource(c.ClientName, refreshToken)
 	client := api.NewClient(ts)
 
-	// Try to get account info from /me
 	me, err := client.Me(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	// /me returns account info, not teammate info for OAuth
-	// Use account ID as identifier if no email provided
 	if me.Email != "" {
 		return me.Email, nil
 	}
 
-	// For OAuth tokens, try to find the authenticated user from teammates list
 	teammates, err := client.ListTeammates(ctx)
 	if err != nil {
-		// Fall back to account ID
 		if me.ID != "" {
 			return me.ID, nil
 		}
@@ -149,12 +233,10 @@ func (c *AuthLoginCmd) fetchEmail(ctx context.Context, refreshToken string) (str
 	}
 
 	if len(teammates.Results) == 1 {
-		// Single teammate account - use that email
 		return teammates.Results[0].Email, nil
 	}
 
 	if len(teammates.Results) > 1 {
-		// Multiple teammates - show list and ask user to re-run with --email
 		fmt.Fprintln(os.Stderr, "Multiple teammates found. Please re-run with --email flag:")
 		for _, t := range teammates.Results {
 			fmt.Fprintf(os.Stderr, "  - %s (%s %s)\n", t.Email, t.FirstName, t.LastName)
@@ -163,7 +245,6 @@ func (c *AuthLoginCmd) fetchEmail(ctx context.Context, refreshToken string) (str
 		return "", fmt.Errorf("multiple teammates - specify --email")
 	}
 
-	// Fall back to account ID
 	if me.ID != "" {
 		return me.ID, nil
 	}
@@ -178,7 +259,7 @@ type AuthLogoutCmd struct {
 }
 
 func (c *AuthLogoutCmd) Run() error {
-	store, err := auth.OpenDefault()
+	store, err := openAuthStoreFn()
 	if err != nil {
 		return fmt.Errorf("open keyring: %w", err)
 	}
@@ -212,7 +293,6 @@ func (c *AuthLogoutCmd) Run() error {
 	}
 
 	if c.Email == "" {
-		// Try to find the only account
 		tokens, err := store.ListTokens()
 		if err != nil {
 			return fmt.Errorf("list tokens: %w", err)
@@ -258,7 +338,6 @@ type AuthStatusCmd struct {
 }
 
 func (c *AuthStatusCmd) Run() error {
-	// Check if credentials exist
 	exists, err := config.ClientCredentialsExists(c.ClientName)
 	if err != nil {
 		return err
@@ -267,11 +346,10 @@ func (c *AuthStatusCmd) Run() error {
 	if !exists {
 		fmt.Fprintln(os.Stdout, "Not configured")
 		fmt.Fprintln(os.Stdout, "Run 'frontcli auth setup <client_id>' to configure.")
-
 		return nil
 	}
 
-	store, err := auth.OpenDefault()
+	store, err := openAuthStoreFn()
 	if err != nil {
 		return fmt.Errorf("open keyring: %w", err)
 	}
@@ -287,7 +365,6 @@ func (c *AuthStatusCmd) Run() error {
 	}
 
 	count := 0
-
 	for _, tok := range tokens {
 		if tok.Client == normalizedClient {
 			count++
@@ -297,12 +374,10 @@ func (c *AuthStatusCmd) Run() error {
 	if count == 0 {
 		fmt.Fprintln(os.Stdout, "OAuth credentials configured but not authenticated.")
 		fmt.Fprintln(os.Stdout, "Run 'frontcli auth login' to authenticate.")
-
 		return nil
 	}
 
 	fmt.Fprintf(os.Stdout, "Authenticated: %d account(s)\n", count)
-
 	for _, tok := range tokens {
 		if tok.Client == normalizedClient {
 			fmt.Fprintf(os.Stdout, "  - %s (since %s)\n", tok.Email, tok.CreatedAt.Format("2006-01-02"))
@@ -314,8 +389,13 @@ func (c *AuthStatusCmd) Run() error {
 
 type AuthListCmd struct{}
 
-func (c *AuthListCmd) Run() error {
-	store, err := auth.OpenDefault()
+func (c *AuthListCmd) Run(flags *RootFlags) error {
+	mode, err := resolveOutputMode(flags)
+	if err != nil {
+		return err
+	}
+
+	store, err := openAuthStoreFn()
 	if err != nil {
 		return fmt.Errorf("open keyring: %w", err)
 	}
@@ -325,14 +405,16 @@ func (c *AuthListCmd) Run() error {
 		return fmt.Errorf("list tokens: %w", err)
 	}
 
+	if mode.JSON {
+		return output.WriteJSON(os.Stdout, map[string]any{"accounts": tokens})
+	}
+
 	if len(tokens) == 0 {
 		fmt.Fprintln(os.Stdout, "No authenticated accounts.")
-
 		return nil
 	}
 
 	fmt.Fprintln(os.Stdout, "Authenticated accounts:")
-
 	for _, tok := range tokens {
 		fmt.Fprintf(os.Stdout, "  %s (client: %s, since %s)\n",
 			tok.Email, tok.Client, tok.CreatedAt.Format("2006-01-02"))

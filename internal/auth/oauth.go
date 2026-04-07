@@ -37,6 +37,25 @@ type AuthorizeOptions struct {
 	Client       string
 }
 
+type RemoteAuthorizeOptions struct {
+	Email        string
+	Client       string
+	ForceConsent bool
+}
+
+type RemoteAuthorization struct {
+	AuthURL    string `json:"auth_url"`
+	State      string `json:"state"`
+	Email      string `json:"email"`
+	ClientName string `json:"client_name"`
+}
+
+type RemoteCompleteOptions struct {
+	Client      string
+	State       string
+	RedirectURL string
+}
+
 var (
 	errAuthorization       = errors.New("authorization error")
 	errHTTPSRequired       = errors.New("redirect uri must use https")
@@ -47,6 +66,7 @@ var (
 	errUnsupportedPlatform = errors.New("unsupported platform")
 	openBrowserFn          = openBrowser
 	randomStateFn          = randomState
+	exchangeAuthCodeFn     = exchangeAuthCode
 )
 
 func Authorize(ctx context.Context, opts AuthorizeOptions) (string, error) {
@@ -54,9 +74,9 @@ func Authorize(ctx context.Context, opts AuthorizeOptions) (string, error) {
 		opts.Timeout = 2 * time.Minute
 	}
 
-	creds, err := config.ReadClientCredentials(opts.Client)
+	cfg, err := oauthConfigForClient(opts.Client)
 	if err != nil {
-		return "", fmt.Errorf("read credentials: %w", err)
+		return "", err
 	}
 
 	state, err := randomStateFn()
@@ -66,6 +86,76 @@ func Authorize(ctx context.Context, opts AuthorizeOptions) (string, error) {
 
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
+
+	authOpts := buildAuthCodeOptions(opts.ForceConsent)
+
+	if opts.Manual {
+		return authorizeManual(ctx, cfg, state, authOpts)
+	}
+
+	return authorizeWithServer(ctx, cfg, state, authOpts)
+}
+
+func BeginRemoteAuthorization(_ context.Context, opts RemoteAuthorizeOptions) (RemoteAuthorization, error) {
+	cfg, err := oauthConfigForClient(opts.Client)
+	if err != nil {
+		return RemoteAuthorization{}, err
+	}
+
+	state, err := randomStateFn()
+	if err != nil {
+		return RemoteAuthorization{}, err
+	}
+
+	clientName, err := config.NormalizeClientNameOrDefault(opts.Client)
+	if err != nil {
+		return RemoteAuthorization{}, err
+	}
+
+	return RemoteAuthorization{
+		AuthURL:    cfg.AuthCodeURL(state, buildAuthCodeOptions(opts.ForceConsent)...),
+		State:      state,
+		Email:      opts.Email,
+		ClientName: clientName,
+	}, nil
+}
+
+func CompleteRemoteAuthorization(ctx context.Context, opts RemoteCompleteOptions) (string, error) {
+	cfg, err := oauthConfigForClient(opts.Client)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(opts.State) == "" {
+		return "", errStateMismatch
+	}
+
+	code, gotState, err := extractCodeAndState(opts.RedirectURL)
+	if err != nil {
+		return "", err
+	}
+
+	if gotState != opts.State {
+		return "", errStateMismatch
+	}
+
+	tok, err := exchangeAuthCodeFn(ctx, cfg, code)
+	if err != nil {
+		return "", fmt.Errorf("exchange code: %w", err)
+	}
+
+	if tok.RefreshToken == "" {
+		return "", errNoRefreshToken
+	}
+
+	return tok.RefreshToken, nil
+}
+
+func oauthConfigForClient(client string) (oauth2.Config, error) {
+	creds, err := config.ReadClientCredentials(client)
+	if err != nil {
+		return oauth2.Config{}, fmt.Errorf("read credentials: %w", err)
+	}
 
 	redirectURI := creds.RedirectURI
 	if redirectURI == "" {
@@ -81,23 +171,27 @@ func Authorize(ctx context.Context, opts AuthorizeOptions) (string, error) {
 
 	parsed, err := url.Parse(cfg.RedirectURL)
 	if err != nil {
-		return "", fmt.Errorf("parse redirect uri: %w", err)
+		return oauth2.Config{}, fmt.Errorf("parse redirect uri: %w", err)
 	}
 
 	if !strings.EqualFold(parsed.Scheme, "https") {
-		return "", errHTTPSRequired
+		return oauth2.Config{}, errHTTPSRequired
 	}
 
+	return cfg, nil
+}
+
+func buildAuthCodeOptions(forceConsent bool) []oauth2.AuthCodeOption {
 	authOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
-	if opts.ForceConsent {
+	if forceConsent {
 		authOpts = append(authOpts, oauth2.SetAuthURLParam("prompt", "consent"))
 	}
 
-	if opts.Manual {
-		return authorizeManual(ctx, cfg, state, authOpts)
-	}
+	return authOpts
+}
 
-	return authorizeWithServer(ctx, cfg, state, authOpts)
+func exchangeAuthCode(ctx context.Context, cfg oauth2.Config, code string) (*oauth2.Token, error) {
+	return cfg.Exchange(ctx, code)
 }
 
 func authorizeManual(ctx context.Context, cfg oauth2.Config, state string, authOpts []oauth2.AuthCodeOption) (string, error) {
