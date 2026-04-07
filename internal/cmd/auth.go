@@ -80,9 +80,9 @@ type AuthLoginCmd struct {
 	ForceConsent bool   `help:"Force consent prompt even if already authorized"`
 	Manual       bool   `help:"Manual authorization (paste URL instead of callback server)"`
 	Remote       bool   `help:"Remote authorization (step 1 returns a URL; step 2 completes with pasted redirect URL)"`
-	Step         int    `help:"Remote authorization step (1 or 2)"`
-	State        string `help:"OAuth state returned by remote step 1"`
-	AuthURL      string `help:"Redirect URL returned by the browser after authorization" name:"auth-url"`
+	Step         int    `help:"Remote-only authorization step (1 or 2)"`
+	State        string `help:"Remote-only OAuth state returned by remote step 1"`
+	RedirectURL  string `help:"Remote-only redirect URL returned by the browser after authorization" name:"redirect-url"`
 }
 
 func (c *AuthLoginCmd) Run(flags *RootFlags) error {
@@ -90,6 +90,10 @@ func (c *AuthLoginCmd) Run(flags *RootFlags) error {
 
 	if c.Remote {
 		return c.runRemote(ctx, flags)
+	}
+
+	if c.Step != 0 || strings.TrimSpace(c.State) != "" || strings.TrimSpace(c.RedirectURL) != "" {
+		return fmt.Errorf("--step, --state, and --redirect-url require --remote")
 	}
 
 	refreshToken, err := authorizeFn(ctx, auth.AuthorizeOptions{
@@ -146,6 +150,8 @@ func (c *AuthLoginCmd) runRemote(ctx context.Context, flags *RootFlags) error {
 	}
 
 	switch c.Step {
+	case 0:
+		return fmt.Errorf("--step is required with --remote (use 1 or 2)")
 	case 1:
 		result, err := beginRemoteAuthorizationFn(ctx, auth.RemoteAuthorizeOptions{
 			Client:       c.ClientName,
@@ -167,14 +173,14 @@ func (c *AuthLoginCmd) runRemote(ctx context.Context, flags *RootFlags) error {
 			return fmt.Errorf("--state is required for --remote --step 2")
 		}
 
-		if strings.TrimSpace(c.AuthURL) == "" {
-			return fmt.Errorf("--auth-url is required for --remote --step 2")
+		if strings.TrimSpace(c.RedirectURL) == "" {
+			return fmt.Errorf("--redirect-url is required for --remote --step 2")
 		}
 
 		refreshToken, err := completeRemoteAuthorizationFn(ctx, auth.RemoteCompleteOptions{
 			Client:      c.ClientName,
 			State:       c.State,
-			RedirectURL: c.AuthURL,
+			RedirectURL: c.RedirectURL,
 		})
 		if err != nil {
 			return fmt.Errorf("authorization failed: %w", err)
