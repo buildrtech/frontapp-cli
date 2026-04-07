@@ -92,12 +92,12 @@ func TestAuthLoginRemoteStep2StoresTokenAndWritesExpectedJSON(t *testing.T) {
 	restoreStdout := captureFile(t, &os.Stdout)
 
 	cmd := AuthLoginCmd{
-		ClientName: "default",
-		Email:      "alice@example.com",
-		Remote:     true,
-		Step:       2,
-		State:      "state-123",
-		AuthURL:    "https://localhost:8484/callback?code=code-123&state=state-123",
+		ClientName:  "default",
+		Email:       "alice@example.com",
+		Remote:      true,
+		Step:        2,
+		State:       "state-123",
+		RedirectURL: "https://localhost:8484/callback?code=code-123&state=state-123",
 	}
 	if err := cmd.Run(&RootFlags{JSON: true}); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -123,11 +123,11 @@ func TestAuthLoginRemoteStep2StoresTokenAndWritesExpectedJSON(t *testing.T) {
 
 func TestAuthLoginRemoteStep2RejectsMissingOrMismatchedState(t *testing.T) {
 	cmd := AuthLoginCmd{
-		ClientName: "default",
-		Email:      "alice@example.com",
-		Remote:     true,
-		Step:       2,
-		AuthURL:    "https://localhost:8484/callback?code=code-123&state=state-123",
+		ClientName:  "default",
+		Email:       "alice@example.com",
+		Remote:      true,
+		Step:        2,
+		RedirectURL: "https://localhost:8484/callback?code=code-123&state=state-123",
 	}
 	if err := cmd.Run(&RootFlags{JSON: true}); err == nil || !strings.Contains(err.Error(), "--state") {
 		t.Fatalf("expected missing state error, got %v", err)
@@ -144,6 +144,32 @@ func TestAuthLoginRemoteStep2RejectsMissingOrMismatchedState(t *testing.T) {
 	cmd.State = "state-123"
 	if err := cmd.Run(&RootFlags{JSON: true}); err == nil || !strings.Contains(err.Error(), "state mismatch") {
 		t.Fatalf("expected state mismatch error, got %v", err)
+	}
+}
+
+func TestAuthLoginRemoteRejectsMissingStep(t *testing.T) {
+	cmd := AuthLoginCmd{
+		ClientName: "default",
+		Email:      "alice@example.com",
+		Remote:     true,
+	}
+
+	if err := cmd.Run(&RootFlags{JSON: true}); err == nil || !strings.Contains(err.Error(), "--step is required") {
+		t.Fatalf("expected missing step error, got %v", err)
+	}
+}
+
+func TestAuthLoginRejectsRemoteOnlyFlagsWithoutRemote(t *testing.T) {
+	cmd := AuthLoginCmd{
+		ClientName:  "default",
+		Email:       "alice@example.com",
+		Step:        2,
+		State:       "state-123",
+		RedirectURL: "https://localhost:8484/callback?code=code-123&state=state-123",
+	}
+
+	if err := cmd.Run(&RootFlags{JSON: true}); err == nil || !strings.Contains(err.Error(), "require --remote") {
+		t.Fatalf("expected remote-only flags error, got %v", err)
 	}
 }
 
