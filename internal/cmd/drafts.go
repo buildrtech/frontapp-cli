@@ -28,7 +28,7 @@ type DraftCmd struct {
 
 type DraftCreateCmd struct {
 	ConvID           string `arg:"" help:"Conversation ID (for reply drafts)" optional:""`
-	Channel          string `help:"Channel ID (for new message drafts)"`
+	Channel          string `help:"Channel ID"`
 	To               string `help:"Recipient (for new message drafts)"`
 	Author           string `help:"Teammate ID to create the draft as"`
 	Inbox            string `help:"Inbox ID to move the draft conversation to"`
@@ -105,6 +105,11 @@ func (c *DraftCreateCmd) Run(flags *RootFlags) error {
 	var createPath string
 	switch {
 	case c.ConvID != "":
+		if strings.TrimSpace(c.Channel) == "" {
+			return fmt.Errorf("--channel is required for reply drafts")
+		}
+
+		req["channel_id"] = c.Channel
 		createPath = fmt.Sprintf("/conversations/%s/drafts", c.ConvID)
 	case c.Channel != "":
 		createPath = fmt.Sprintf("/channels/%s/drafts", c.Channel)

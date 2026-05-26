@@ -46,6 +46,7 @@ If not authenticated, the user must run `frontcli auth login` interactively (req
 3. **Read before write** -- fetch current state before modifying (archive, assign, tag, reply).
 4. **Pipe with jq** -- extract IDs/fields: `frontcli conv list --json | jq -r '._results[].id'`
 5. **Multi-account** -- use `--account user@email.com` if the user has multiple Front accounts.
+6. **Do not inspect keychain contents**. Use `frontcli auth status`, `frontcli auth list`, and `frontcli whoami`; if auth fails, ask the user to run `frontcli auth login`.
 
 ## ID Reference
 
@@ -57,9 +58,9 @@ If not authenticated, the user must run `frontcli auth login` interactively (req
 | `tea_` | teammate     | `tea_abc123` |
 | `tag_` | tag          | `tag_abc123` |
 | `inb_` | inbox        | `inb_abc123` |
-| `chn_` | channel      | `chn_abc123` |
+| `cha_` | channel      | `cha_abc123` |
 | `ctc_` | contact      | `ctc_abc123` |
-| `drf_` | draft        | `drf_abc123` |
+| `msg_` | draft        | `msg_abc123` |
 | `rsp_` | template     | `rsp_abc123` |
 | `att_` | attachment   | `att_abc123` |
 | `hdl_` | handle       | `hdl_abc123` |
@@ -128,7 +129,7 @@ Requires a channel ID. Find channels first:
 
 ```bash
 frontcli channels list --json
-frontcli msg send --channel chn_xxx --to user@example.com --subject "Hello" --body "Message body"
+frontcli msg send --channel cha_xxx --to user@example.com --subject "Hello" --body "Message body"
 ```
 
 ### Add Internal Comment
@@ -199,12 +200,64 @@ frontcli msg reply cnv_xxx --body "$BODY"
 
 ### Drafts
 
+Drafts are Front draft messages, so their IDs usually start with `msg_`.
+
 ```bash
-frontcli drafts create cnv_xxx --body "Draft reply"
+frontcli drafts create cnv_xxx --channel cha_xxx --author tea_xxx --inbox inb_xxx --body "Draft reply"
 frontcli drafts list cnv_xxx --json
-frontcli drafts update drf_xxx --body "Updated" --draft-version 1
-frontcli drafts delete drf_xxx
+frontcli drafts get msg_xxx --json
+frontcli drafts update msg_xxx --body "Updated" --draft-version draft-ver-123
+frontcli drafts delete msg_xxx --draft-version draft-ver-123
 ```
+
+#### Reply Drafts
+
+Front requires `channel_id` in the request body for `POST /conversations/{conversation_id}/drafts`.
+That means `frontcli drafts create <cnv>` must include `--channel`, even though the conversation
+already exists. If Front returns `body.channel_id: missing`, the CLI is too old or the command is
+missing `--channel`.
+
+Resolve the channel before creating a reply draft:
+
+```bash
+# Read the last message recipients and identify the address the customer mailed.
+frontcli conv messages cnv_xxx --json
+
+# Map that address to a Front channel and inbox.
+frontcli channels list --json
+frontcli inboxes channels inb_xxx --json
+```
+
+For a clean shared reply draft:
+
+```bash
+frontcli drafts list cnv_xxx --json
+frontcli drafts create cnv_xxx \
+  --channel cha_xxx \
+  --author tea_xxx \
+  --inbox inb_xxx \
+  --mode shared \
+  --body-file ./reply.html \
+  --no-default-signature \
+  --json
+frontcli drafts list cnv_xxx --json
+```
+
+Use a small HTML file with paragraph tags for multi-paragraph email bodies. Plain text bodies may
+render as one dense block in Front:
+
+```html
+<p>Dag Tobias,</p>
+<p>Merci om dit door te sturen.</p>
+<p>...</p>
+```
+
+Do not use `frontcli drafts create --channel ... --to ...` when the user asked for a reply draft;
+that creates a new draft conversation instead of attaching the draft to the existing thread.
+
+If using a local dev build and auth works in the user shell but fails for the agent, rerun the same
+`frontcli` command outside the sandbox. macOS Keychain access may be scoped to the executable and
+the sandbox context.
 
 ### Custom Fields
 

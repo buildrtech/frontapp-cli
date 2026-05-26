@@ -1015,10 +1015,11 @@ func TestDraftCreateDefaultsAssigneeToAuthorForReplyDrafts(t *testing.T) {
 	t.Cleanup(func() { newClientFromAuth = old })
 
 	cmd := DraftCreateCmd{
-		ConvID: "cnv_123",
-		Body:   "reply body",
-		Author: "tea_author",
-		Inbox:  "inb_team",
+		ConvID:  "cnv_123",
+		Channel: "cha_v4x",
+		Body:    "reply body",
+		Author:  "tea_author",
+		Inbox:   "inb_team",
 	}
 	flags := &RootFlags{JSON: true, Account: "test@example.com"}
 
@@ -1035,9 +1036,27 @@ func TestDraftCreateDefaultsAssigneeToAuthorForReplyDrafts(t *testing.T) {
 		t.Fatalf("expected default private mode, got %#v", postBody["mode"])
 	}
 
+	if postBody["channel_id"] != "cha_v4x" {
+		t.Fatalf("expected channel_id in reply draft body, got %#v", postBody["channel_id"])
+	}
+
 	patchBody := requests[1].body
 	if patchBody["assignee_id"] != "tea_author" {
 		t.Fatalf("expected assignee_id to default to author, got %#v", patchBody["assignee_id"])
+	}
+}
+
+func TestDraftCreateRequiresChannelForReplyDrafts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	err := (&DraftCreateCmd{
+		ConvID: "cnv_123",
+		Body:   "reply body",
+		Author: "tea_author",
+		Inbox:  "inb_team",
+	}).Run(&RootFlags{JSON: true, Account: "test@example.com"})
+	if err == nil || !strings.Contains(err.Error(), "--channel is required for reply drafts") {
+		t.Fatalf("expected channel requirement error, got %v", err)
 	}
 }
 

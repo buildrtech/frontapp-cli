@@ -293,13 +293,13 @@ frontcli msg attachment download att_xxx -o ./file.pdf
 
 ```bash
 # Create draft (reply to conversation)
-frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --body "Draft reply"
+frontcli drafts create cnv_xxx --channel cha_xxx --author tea_xxx --inbox inb_xxx --body "Draft reply"
 
 # Create draft without adding the default signature
-frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --no-default-signature --body "Draft reply"
+frontcli drafts create cnv_xxx --channel cha_xxx --author tea_xxx --inbox inb_xxx --no-default-signature --body "Draft reply"
 
 # Create draft with an explicit signature
-frontcli drafts create cnv_xxx --author tea_xxx --inbox inb_xxx --signature sig_xxx --body "Draft reply"
+frontcli drafts create cnv_xxx --channel cha_xxx --author tea_xxx --inbox inb_xxx --signature sig_xxx --body "Draft reply"
 
 # Create draft (new message via channel)
 frontcli drafts create --channel cha_xxx --to user@example.com --author tea_xxx --inbox inb_xxx --body "Draft message"
