@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -23,6 +24,8 @@ type TokenSource struct {
 	store        Store
 	accessToken  string
 	accessExpiry time.Time
+	storedToken  Token
+	storedLoaded bool
 }
 
 func NewTokenSource(client, email string, store Store) *TokenSource {
@@ -107,8 +110,7 @@ func (ts *TokenSource) Invalidate() {
 }
 
 func (ts *TokenSource) refresh() error {
-	// Get refresh token from keyring
-	tok, err := ts.store.GetToken(ts.client, ts.email)
+	tok, err := ts.getStoredToken()
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrNotAuthenticated, err)
 	}
@@ -146,13 +148,32 @@ func (ts *TokenSource) refresh() error {
 	// If we got a new refresh token, store it
 	if newTok.RefreshToken != "" && newTok.RefreshToken != tok.RefreshToken {
 		tok.RefreshToken = newTok.RefreshToken
+		ts.storedToken = tok
+		ts.storedLoaded = true
+
 		if err := ts.store.SetToken(ts.client, ts.email, tok); err != nil {
 			// Log but don't fail - we still have a working access token
-			fmt.Printf("Warning: failed to store new refresh token: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to store new refresh token: %v\n", err)
 		}
 	}
 
 	return nil
+}
+
+func (ts *TokenSource) getStoredToken() (Token, error) {
+	if ts.storedLoaded {
+		return ts.storedToken, nil
+	}
+
+	tok, err := ts.store.GetToken(ts.client, ts.email)
+	if err != nil {
+		return Token{}, err
+	}
+
+	ts.storedToken = tok
+	ts.storedLoaded = true
+
+	return tok, nil
 }
 
 // GetAuthenticatedEmail returns the email for the authenticated account,
