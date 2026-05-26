@@ -167,7 +167,7 @@ func (ts *TokenSource) getStoredToken() (Token, error) {
 
 	tok, err := ts.store.GetToken(ts.client, ts.email)
 	if err != nil {
-		return Token{}, err
+		return Token{}, fmt.Errorf("get stored token: %w", err)
 	}
 
 	ts.storedToken = tok

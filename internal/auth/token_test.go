@@ -111,7 +111,7 @@ func TestTokenSourceUsesRotatedRefreshTokenWhenStoreUpdateFails(t *testing.T) {
 			Email:        "alice@example.com",
 			RefreshToken: "refresh-a",
 		},
-		setTokenErr: errors.New("keychain unavailable"),
+		setTokenErr: errStoreUnavailable,
 	}
 	ts := NewTokenSource("default", "alice@example.com", store)
 
@@ -182,6 +182,8 @@ func TestTokenSourceReturnsCachedAccessTokenWithoutStoreRead(t *testing.T) {
 	}
 }
 
+var errStoreUnavailable = errors.New("keychain unavailable")
+
 type countingStore struct {
 	token         Token
 	getTokenErr   error
@@ -200,6 +202,7 @@ func (s *countingStore) SetToken(client, email string, tok Token) error {
 		return s.setTokenErr
 	}
 	s.token = tok
+
 	return nil
 }
 
@@ -208,6 +211,7 @@ func (s *countingStore) GetToken(client, email string) (Token, error) {
 	if s.getTokenErr != nil {
 		return Token{}, s.getTokenErr
 	}
+
 	return s.token, nil
 }
 
@@ -265,6 +269,7 @@ func (r *tokenRefreshRecorder) handler(w http.ResponseWriter, req *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		panic(fmt.Sprintf("encode token response: %v", err))
 	}
@@ -276,6 +281,7 @@ func (r *tokenRefreshRecorder) refreshTokens() []string {
 
 	out := make([]string, len(r.tokens))
 	copy(out, r.tokens)
+
 	return out
 }
 
@@ -287,6 +293,7 @@ func withTokenEndpoint(t *testing.T, handler http.HandlerFunc) {
 
 	oldEndpoint := frontEndpoint
 	frontEndpoint.TokenURL = server.URL
+
 	t.Cleanup(func() { frontEndpoint = oldEndpoint })
 }
 
@@ -296,6 +303,7 @@ func withTestClientCredentials(t *testing.T) {
 	home := t.TempDir()
 	oldHome := os.Getenv("HOME")
 	_ = os.Setenv("HOME", home)
+
 	t.Cleanup(func() { _ = os.Setenv("HOME", oldHome) })
 
 	if err := config.WriteClientCredentials("default", config.OAuthCredentials{
