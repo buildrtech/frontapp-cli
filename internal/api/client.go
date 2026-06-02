@@ -349,6 +349,11 @@ func (c *Client) Me(ctx context.Context) (*Me, error) {
 // ListConversations lists conversations with optional filters.
 func (c *Client) ListConversations(ctx context.Context, opts ListConversationsOptions) (*ListResponse[Conversation], error) {
 	path := "/conversations?" + opts.Query()
+	if opts.InboxID != "" {
+		inboxOpts := opts
+		inboxOpts.InboxID = ""
+		path = "/inboxes/" + url.PathEscape(opts.InboxID) + "/conversations?" + inboxOpts.Query()
+	}
 
 	var resp ListResponse[Conversation]
 	if err := c.Get(ctx, path, &resp); err != nil {
@@ -565,10 +570,6 @@ func ParseStatus(status string) []string {
 
 func (o ListConversationsOptions) Query() string {
 	params := url.Values{}
-
-	if o.InboxID != "" {
-		params.Set("q[inbox_id]", o.InboxID)
-	}
 
 	if o.TagID != "" {
 		params.Set("q[tag_id]", o.TagID)

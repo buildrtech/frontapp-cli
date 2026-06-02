@@ -57,6 +57,39 @@ func TestConvSearchEncodesQuery(t *testing.T) {
 	}
 }
 
+func TestConvListInboxUsesInboxConversationsEndpoint(t *testing.T) {
+	var gotPath string
+	var gotLimit string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		gotLimit = r.URL.Query().Get("limit")
+		_, _ = io.WriteString(w, `{"_results":[]}`)
+	}))
+	defer srv.Close()
+
+	old := newClientFromAuth
+	newClientFromAuth = func(_, _ string) (*api.Client, error) {
+		return api.NewClientWithBaseURL(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"}), srv.URL), nil
+	}
+	t.Cleanup(func() { newClientFromAuth = old })
+
+	cmd := ConvListCmd{Inbox: "inb_123", Limit: 25, SortOrder: "-"}
+	flags := &RootFlags{JSON: true, Account: "test@example.com"}
+
+	if err := cmd.Run(flags); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if gotPath != "/inboxes/inb_123/conversations" {
+		t.Fatalf("expected inbox conversations path, got %s", gotPath)
+	}
+
+	if gotLimit != "25" {
+		t.Fatalf("expected limit=25, got %q", gotLimit)
+	}
+}
+
 func TestBuildConvSearchQuery_NormalizesDateOnly(t *testing.T) {
 	before := time.Date(2026, 3, 3, 0, 0, 0, 0, time.Local).Unix()
 	after := time.Date(2026, 2, 1, 0, 0, 0, 0, time.Local).Unix()
