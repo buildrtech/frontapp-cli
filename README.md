@@ -60,6 +60,40 @@ make build
 ./bin/frontcli --help
 ```
 
+### Release Artifacts
+
+Build Linux release binaries and checksums:
+
+```bash
+make release
+```
+
+This writes:
+
+- `bin/release/frontcli-linux-amd64-<commit>`
+- `bin/release/frontcli-linux-aarch64-<commit>`
+- `bin/release/SHA256SUMS`
+
+To publish those artifacts to an S3 bucket, provide the bucket explicitly:
+
+```bash
+RELEASE_BUCKET=your-public-bucket AWS_PROFILE=publisher make release-upload
+```
+
+Optional environment variables:
+
+- `RELEASE_PREFIX=frontcli` controls the S3 key prefix.
+- `RELEASE_PUBLIC_BASE_URL=https://downloads.example.com` controls the URLs printed after upload.
+- `RELEASE_DATE=2026-06-02T00:00:00Z` controls the build date stamped into the binaries.
+- `RELEASE_SKIP_BUILD=1` uploads existing files from `bin/release`.
+- `RELEASE_ALLOW_DIRTY=1` permits uploading from a dirty worktree.
+
+Verify that uploaded S3 objects are publicly readable:
+
+```bash
+RELEASE_BUCKET=your-public-bucket make release-verify-public
+```
+
 ## Quick Start
 
 ### 1. Create a Front OAuth App

@@ -2,11 +2,13 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := build
 
-.PHONY: build frontcli front help fmt fmt-check lint test ci tools
+.PHONY: build frontcli front help fmt fmt-check lint test test-scripts ci tools release release-upload release-verify-public
 
 BIN_DIR := $(CURDIR)/bin
 BIN := $(BIN_DIR)/frontcli
 CMD := ./cmd/frontcli
+RELEASE_DIR ?= $(BIN_DIR)/release
+RELEASE_PREFIX ?= frontcli
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo "")
@@ -50,6 +52,15 @@ tools:
 	@GOBIN=$(TOOLS_DIR) go install golang.org/x/tools/cmd/goimports@v0.41.0
 	@GOBIN=$(TOOLS_DIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
 
+release:
+	@RELEASE_DIR="$(RELEASE_DIR)" RELEASE_PREFIX="$(RELEASE_PREFIX)" bash scripts/release.sh build
+
+release-upload:
+	@RELEASE_DIR="$(RELEASE_DIR)" RELEASE_PREFIX="$(RELEASE_PREFIX)" bash scripts/release.sh upload
+
+release-verify-public:
+	@RELEASE_DIR="$(RELEASE_DIR)" RELEASE_PREFIX="$(RELEASE_PREFIX)" bash scripts/release.sh verify-public
+
 fmt: tools
 	@$(GOIMPORTS) -local github.com/dedene/frontapp-cli -w .
 	@$(GOFUMPT) -w .
@@ -64,5 +75,9 @@ lint: tools
 
 test:
 	@go test ./...
+	@$(MAKE) test-scripts
+
+test-scripts:
+	@bash scripts/release_test.sh
 
 ci: fmt-check lint test
